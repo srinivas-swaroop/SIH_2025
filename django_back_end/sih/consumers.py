@@ -3,6 +3,7 @@ import json
 import base64
 import cv2
 import numpy as np
+import pickle
 import face_recognition
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -17,7 +18,7 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
 
         # Load all students safely in async context
         self.known_students = await self.load_students()
-        self.match_counters = {}  # track consecutive matches
+        self.match_counters = {}  # Track consecutive matches
 
     async def disconnect(self, close_code):
         print("WebSocket disconnected")
@@ -40,6 +41,7 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
         recognized_students = []
 
         for face_encoding in face_encodings:
+            # Compare face with all known students
             distances = [
                 face_recognition.face_distance([s["embedding"]], face_encoding)[0]
                 for s in self.known_students
@@ -57,6 +59,7 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
                             "name": student["name"],
                             "roll_no": student["roll_no"]
                         })
+                        # Prevent duplicate recognition
                         self.match_counters[roll_no] = -9999
                 else:
                     self.match_counters[roll_no] = 0
@@ -64,27 +67,16 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "recognized_students": recognized_students
         }))
-# sih/models.py
-from django.db import models
-import numpy as np
-import pickle
 
-import pickle
-import numpy as np
-from django.db import models
-
-import pickle
-import numpy as np
-# from django.db import models
-
-class Student(models.Model):
-    name = models.CharField(max_length=100)
-    roll_no = models.CharField(max_length=50)
-
-    # Default embedding: 128-dim zero vector serialized to bytes
-    default_embedding = pickle.dumps(np.zeros(128, dtype=np.float32))
-    embedding_blob = models.BinaryField(default=default_embedding)
-
-    def load_embedding(self):
-        # Convert stored bytes back to NumPy array
-        return np.array(pickle.loads(self.embedding_blob))
+    # Async-safe ORM call to load students
+    @database_sync_to_async
+    def load_students(self):
+        from .models import Student
+        students = []
+        for student in Student.objects.all():
+            students.append({
+                "name": student.name,
+                "roll_no": student.roll_no,
+                "embedding": student.load_embedding()  # Synchronous but wrapped
+            })
+        return students
