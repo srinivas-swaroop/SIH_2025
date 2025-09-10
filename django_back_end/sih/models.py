@@ -1,90 +1,16 @@
-# sih/consumers.py
-import json
-import base64
-import cv2
-import numpy as np
-import face_recognition
-from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-
-STRICT_THRESHOLD = 0.4
-REQUIRED_CONSECUTIVE_MATCHES = 5
-
-class AttendanceConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        await self.accept()
-        await self.send(text_data=json.dumps({"message": "WebSocket connected ✅"}))
-
-        # Load all students safely in async context
-        self.known_students = await self.load_students()
-        self.match_counters = {}  # track consecutive matches
-
-    async def disconnect(self, close_code):
-        print("WebSocket disconnected")
-
-    async def receive(self, text_data):
-        data = json.loads(text_data)
-        frame_data = data.get("frame")
-        if not frame_data:
-            return
-
-        # Convert Base64 to OpenCV image
-        header, encoded = frame_data.split(",", 1)
-        nparr = np.frombuffer(base64.b64decode(encoded), np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        face_locations = face_recognition.face_locations(rgb_frame, model="hog")
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-
-        recognized_students = []
-
-        for face_encoding in face_encodings:
-            distances = [
-                face_recognition.face_distance([s["embedding"]], face_encoding)[0]
-                for s in self.known_students
-            ]
-            if distances:
-                min_index = np.argmin(distances)
-                min_dist = distances[min_index]
-                student = self.known_students[min_index]
-                roll_no = student["roll_no"]
-
-                if min_dist < STRICT_THRESHOLD:
-                    self.match_counters[roll_no] = self.match_counters.get(roll_no, 0) + 1
-                    if self.match_counters[roll_no] >= REQUIRED_CONSECUTIVE_MATCHES:
-                        recognized_students.append({
-                            "name": student["name"],
-                            "roll_no": student["roll_no"]
-                        })
-                        self.match_counters[roll_no] = -9999
-                else:
-                    self.match_counters[roll_no] = 0
-
-        await self.send(text_data=json.dumps({
-            "recognized_students": recognized_students
-        }))
-# sih/models.py
 from django.db import models
 import numpy as np
 import pickle
-
-import pickle
-import numpy as np
-from django.db import models
-
-import pickle
-import numpy as np
-# from django.db import models
 
 class Student(models.Model):
     name = models.CharField(max_length=100)
     roll_no = models.CharField(max_length=50)
+    embedding_blob = models.BinaryField()
 
-    # Default embedding: 128-dim zero vector serialized to bytes
-    default_embedding = pickle.dumps(np.zeros(128, dtype=np.float32))
-    embedding_blob = models.BinaryField(default=default_embedding)
+    def save_embedding(self, embedding: np.ndarray):
+        # Convert to 128-dim float32 and pickle
+        self.embedding_blob = pickle.dumps(embedding.astype(np.float32))
 
     def load_embedding(self):
         # Convert stored bytes back to NumPy array
-        return np.array(pickle.loads(self.embedding_blob))
+        return np.array(pickle.loads(self.embedding_blob), dtype=np.float32)
