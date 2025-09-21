@@ -10,12 +10,11 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 # ------------------------- CONFIG ------------------------- #
-STRICT_THRESHOLD = 0.65           # Distance threshold for face match
-FRAME_SCALE = 0.25                # Resize frame for faster processing
-BLINK_EAR_THRESHOLD = 0.25        # Eye Aspect Ratio threshold for blink
-BLINK_FRAMES_REQUIRED = 2         # Frames required to confirm blink
-MATCH_FRAMES_REQUIRED = 3         # Frames required for recognition confirmation
-# --------------------------------------------------------- #
+STRICT_THRESHOLD = 0.6             # Higher tolerance → matches across different images
+FRAME_SCALE = 0.25                 # Resize frame for faster processing
+BLINK_EAR_THRESHOLD = 0.25         # Eye Aspect Ratio threshold for blink
+BLINK_FRAMES_REQUIRED = 1          # Require just 1 blink frame
+# ---------------------------------------------------------- #
 
 # Dlib setup for blink detection
 detector = dlib.get_frontal_face_detector()
@@ -37,7 +36,7 @@ def is_blinking(shape):
     left_ear = eye_aspect_ratio(left_eye)
     right_ear = eye_aspect_ratio(right_eye)
     ear = (left_ear + right_ear) / 2.0
-    return ear < BLINK_EAR_THRESHOLD, ear
+    return ear < BLINK_EAR_THRESHOLD
 
 # ------------------------- CONSUMER ------------------------- #
 class AttendanceConsumer(AsyncWebsocketConsumer):
@@ -47,11 +46,10 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
 
         # Load students from DB
         self.known_students = await self.load_students()
+        self.known_encodings = np.array([s["embedding"] for s in self.known_students])
         print(f"[INFO] Loaded {len(self.known_students)} students")
 
-        # Track blink/match state per student
-        self.blink_counters = {}  # roll_no -> consecutive blink frames
-        self.match_counters = {}  # roll_no -> consecutive face matches
+        # Track liveness per student
         self.liveness_confirmed = {}  # roll_no -> bool
 
     async def disconnect(self, close_code):
@@ -69,7 +67,7 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        small_frame = cv2.resize(rgb_frame, (0,0), fx=FRAME_SCALE, fy=FRAME_SCALE)
+        small_frame = cv2.resize(rgb_frame, (0, 0), fx=FRAME_SCALE, fy=FRAME_SCALE)
 
         # Face recognition
         face_locations = face_recognition.face_locations(small_frame, model="hog")
@@ -77,55 +75,40 @@ class AttendanceConsumer(AsyncWebsocketConsumer):
         recognized_students = []
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        scale_factor = 1.0 / FRAME_SCALE  # To map small_frame coords to full frame
+        scale_factor = 1.0 / FRAME_SCALE  # To map back coords to full frame
 
         for face_encoding, (top, right, bottom, left) in zip(face_encodings, face_locations):
-            # Map location back to original frame
-            rect = dlib.rectangle(
-                int(left*scale_factor), int(top*scale_factor),
-                int(right*scale_factor), int(bottom*scale_factor)
-            )
-
-            # Compare with known embeddings
-            distances = [np.linalg.norm(face_encoding - s["embedding"]) for s in self.known_students]
-            if not distances:
+            # Compare with all known encodings at once
+            distances = face_recognition.face_distance(self.known_encodings, face_encoding)
+            if not len(distances):
                 continue
 
             min_index = np.argmin(distances)
             min_dist = distances[min_index]
-            student = self.known_students[min_index]
-            roll_no = student["roll_no"]
 
-            # Initialize counters if first time
-            if roll_no not in self.match_counters:
-                self.match_counters[roll_no] = 0
-                self.blink_counters[roll_no] = 0
-                self.liveness_confirmed[roll_no] = False
-
-            # Face match check
             if min_dist < STRICT_THRESHOLD:
-                self.match_counters[roll_no] += 1
-            else:
-                self.match_counters[roll_no] = 0
-                continue
+                student = self.known_students[min_index]
+                roll_no = student["roll_no"]
 
-            # Liveliness check via blink
-            shape = predictor(gray_frame, rect)
-            blinking, ear = is_blinking(shape)
-            if blinking:
-                self.blink_counters[roll_no] += 1
-            else:
-                self.blink_counters[roll_no] = max(0, self.blink_counters[roll_no]-1)
+                # Map back to full frame rect for blink detection
+                rect = dlib.rectangle(
+                    int(left * scale_factor), int(top * scale_factor),
+                    int(right * scale_factor), int(bottom * scale_factor)
+                )
+                shape = predictor(gray_frame, rect)
+                blinking = is_blinking(shape)
 
-            # Confirm liveliness if blinked enough frames
-            if self.blink_counters[roll_no] >= BLINK_FRAMES_REQUIRED:
-                self.liveness_confirmed[roll_no] = True
+                if roll_no not in self.liveness_confirmed:
+                    self.liveness_confirmed[roll_no] = False
 
-            # Only send recognized student if face matches and liveliness confirmed
-            if self.match_counters[roll_no] >= MATCH_FRAMES_REQUIRED and self.liveness_confirmed[roll_no]:
+                if blinking:
+                    self.liveness_confirmed[roll_no] = True
+
                 recognized_students.append({
                     "name": student["name"],
-                    "roll_no": roll_no
+                    "roll_no": roll_no,
+                    "liveness": self.liveness_confirmed[roll_no],
+                    "distance": round(float(min_dist), 3)  # For debugging tolerance
                 })
 
         await self.send(text_data=json.dumps({

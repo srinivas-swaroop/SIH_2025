@@ -14,7 +14,31 @@ body {
     z-index: -1;
     padding-top: 80px; 
 }
+
+  .sidebtn {
+    position: absolute;
+    left: 2px;
+    top:90px;
+    text-decoration: none;
+    padding: 0.8rem 1.6rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    margin-top: 50px;
+    width: 200px;
+  }
   
+  .sidebtn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-3px);
+  }
+
 
 .white{
     color: #f3efef;
@@ -79,6 +103,7 @@ body {
     transition: all 0.3s ease;
     margin-top: 50px;
     width: 200px;
+    margin-left: 5px;
   }
   
   .btn:hover {
@@ -795,3 +820,251 @@ body {
     animation: slideUp 0.9s ease-in-out;
     height: 400px;
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* recognize-student.css */
+
+/* Main container */
+.recognize-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background-color: #000;
+  color: #fff;
+  font-family: "Poppins", sans-serif;
+  padding: 30px 20px;
+}
+
+/* Heading */
+.recognize-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Video */
+.recognize-video {
+  border: 2px solid #fff;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  max-width: 100%;
+}
+
+/* Recognized list */
+.recognize-list {
+  list-style-type: none;
+  padding: 0;
+  width: 100%;
+  max-width: 400px;
+}
+
+.recognize-list li {
+  background-color: #111;
+  border: 1px solid #333;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  transition: background 0.3s ease, transform 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recognize-list li:hover {
+  background-color: #1a1a1a;
+  transform: translateY(-2px);
+}
+
+/* Recognized ✅ icon style */
+.recognize-check {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .recognize-title {
+    font-size: 22px;
+  }
+
+  .recognize-video {
+    width: 100%;
+  }
+
+  .recognize-list li {
+    padding: 10px 12px;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* register-student.css */
+
+/* Main container */
+.register-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background-color: #000; /* black theme */
+  color: #fff;
+  font-family: "Poppins", sans-serif;
+  padding: 30px 20px;
+}
+
+/* Heading */
+.register-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Video element */
+.register-video {
+  border: 2px solid #fff;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  max-width: 100%;
+}
+
+/* Input fields */
+.register-input {
+  background-color: #111;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 10px 12px;
+  margin-right: 10px;
+  border-radius: 8px;
+  outline: none;
+  transition: border 0.3s ease, transform 0.2s ease;
+}
+
+.register-input:focus {
+  border-color: #00ff00;
+  transform: translateY(-1px);
+}
+
+/* Button */
+.register-btn {
+  background-color: #00ff00;
+  color: #000;
+  font-weight: 600;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+  margin-top: 20px;
+}
+
+.register-btn:hover {
+  background-color: #33ff33;
+  transform: translateY(-2px);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .register-title {
+    font-size: 22px;
+  }
+
+  .register-input {
+    width: 100%;
+    margin: 5px 0;
+  }
+
+  .register-btn {
+    width: 100%;
+    margin-top: 20px;
+  }
+}

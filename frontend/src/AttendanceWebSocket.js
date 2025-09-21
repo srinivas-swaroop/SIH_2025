@@ -1,16 +1,17 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
+import "./index.css";
 
-const AttendanceWebSocket = () => {
+const RegisterStudent = () => {
   const videoRef = useRef(null);
-  const wsRef = useRef(null);
-  const [recognized, setRecognized] = useState([]);
   const [name, setName] = useState("");
   const [rollNo, setRollNo] = useState("");
+  // const [teacherId, setTeacherId] = useState(null);
+  const [gender,setGender] = useState("");
+  const [email,setEmail] = useState("");
+  const loggedInUsername = localStorage.getItem("username");
 
-  const WS_OPEN = 1; // WebSocket.OPEN
-
-  // Start webcam and WS connection
   useEffect(() => {
+    // Start webcam
     const startWebcam = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -20,48 +21,9 @@ const AttendanceWebSocket = () => {
       }
     };
     startWebcam();
-
-    // Connect WebSocket
-    wsRef.current = new WebSocket("ws://localhost:8000/ws/attendance/");
-
-    wsRef.current.onopen = () => {
-      console.log("WebSocket connected ✅");
-
-      // Live recognition: send frames every second
-      wsRef.current.interval = setInterval(() => {
-        if (!videoRef.current || wsRef.current.readyState !== WS_OPEN) return;
-
-        const { videoWidth, videoHeight } = videoRef.current;
-        if (!videoWidth || !videoHeight) return;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = videoWidth;
-        canvas.height = videoHeight;
-        canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
-        wsRef.current.send(JSON.stringify({ frame: canvas.toDataURL("image/jpeg") }));
-      }, 1000);
-    };
-
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.recognized_students) setRecognized(data.recognized_students);
-    };
-
-    wsRef.current.onclose = () => console.log("WebSocket closed ❌");
-
-    return () => {
-      if (wsRef.current) {
-        clearInterval(wsRef.current.interval);
-        wsRef.current.close();
-      }
-    };
   }, []);
 
-  // Capture a frame from webcam
   const captureFrame = () => {
-    if (!videoRef.current) return null;
-
     const { videoWidth, videoHeight } = videoRef.current;
     if (!videoWidth || !videoHeight) return null;
 
@@ -73,24 +35,39 @@ const AttendanceWebSocket = () => {
     return canvas.toDataURL("image/jpeg");
   };
 
-  // Register a new student
   const registerStudent = async () => {
     if (!name || !rollNo) return alert("Enter name and roll number");
     const frame = captureFrame();
     if (!frame) return alert("Could not capture frame");
 
     try {
-      const response = await fetch("http://localhost:8080/api/register/", {
+      // Step 1: Fetch all teachers
+      const res = await fetch("http://localhost:8000/api/faculty-all/");
+      const teachers = await res.json();
+
+      // Step 2: Find the logged-in teacher
+      const matchedTeacher = teachers.find((t) => t.username === loggedInUsername);
+      if (!matchedTeacher) return alert("Logged-in teacher not found in faculty list");
+
+      const teacherIdToUse = matchedTeacher.id;
+
+      // Step 3: Register the student under that teacher
+      const response = await fetch("http://localhost:8000/api/register/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, roll_no: rollNo, frame }),
+        body: JSON.stringify({ name, roll_no: rollNo, frame, teacher: teacherIdToUse,gender,email}),
       });
 
       const data = await response.json();
-      alert(data.message || data.error);
-
-      setName("");
-      setRollNo("");
+      if (response.ok) {
+        alert(data.message);
+        setName("");
+        setRollNo("");
+        setGender("");
+        setEmail("");
+      } else {
+        alert(data.error || data.detail);
+      }
     } catch (err) {
       console.error("Registration failed:", err);
       alert("Failed to register student");
@@ -98,54 +75,53 @@ const AttendanceWebSocket = () => {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="text-xl font-bold mb-2">Attendance & Registration</h2>
+    <div className="register-page">
+      <h2 className="register-title">Register New Student</h2>
 
       <video
         ref={videoRef}
         autoPlay
         playsInline
         width="400"
-        className="border rounded mb-4"
+        className="register-video"
       />
 
-      <div className="mb-4">
-        <h3 className="font-semibold">Register Student</h3>
+      <div className="register-inputs">
         <input
           type="text"
           placeholder="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="border p-1 mr-2"
+          className="register-input"
         />
         <input
           type="text"
           placeholder="Roll No"
           value={rollNo}
           onChange={(e) => setRollNo(e.target.value)}
-          className="border p-1 mr-2"
+          className="register-input"
         />
-        <button
-          onClick={registerStudent}
-          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
-        >
-          Capture & Register
-        </button>
+        <input
+          type="text"
+          placeholder="Gender"
+          value={gender}
+          className="register-input"
+          onChange={(e)=>setGender(e.target.value)}
+        />
+        <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        className="register-input"
+        onChange={(e)=>setEmail(e.target.value)}
+        />
       </div>
 
-      <div>
-        <h3 className="font-semibold mt-2">Recognized Students:</h3>
-        <ul>
-          {recognized.length > 0
-            ? recognized.map((s, i) => (
-                <li key={i}>{s.name} ({s.roll_no})</li>
-              ))
-            : <li>No students recognized yet.</li>
-          }
-        </ul>
-      </div>
+      <button onClick={registerStudent} className="register-btn">
+        Capture & Register
+      </button>
     </div>
   );
 };
 
-export default AttendanceWebSocket;
+export default RegisterStudent;
